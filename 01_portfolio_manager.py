@@ -56,7 +56,12 @@ _ = sql(f'CREATE DATABASE IF NOT EXISTS {genie_catalog}.{genie_schema}')
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC By creating tables, it is worth mentioning that Databricks can automatically suggest comlumn and table description using generative AI. Simply open your table from your catalog (in this case `fsgtm.genie_cap_market.news`) as follows. For the purpose of our demo, we will provide column description at table creation, ensuring relevance of our metadata for text-to-sql capabilities.
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/metadata_generate.png' width=800/>
 
 # COMMAND ----------
 
@@ -127,6 +132,43 @@ COMMENT 'The `news` table contains articles from various sources related to the 
 
 # MAGIC %md
 # MAGIC ## Ingest data
+# MAGIC With our tables properly defined and governed on UC, we can materialize our delta shares into tables as simple select statement. We will ingest the following tables
+# MAGIC
+# MAGIC - portfolio: contains companies description for an hypothetical portfolio
+# MAGIC - fundamental: contains market fundamentals such as market cap for each ticker
+# MAGIC - prices: daily prices for each ticker, including open, high, low, close and volume information
+# MAGIC - news: news articles mentioning our different instruments
+# MAGIC - news_ticker: article may cover multiple tickers
+
+# COMMAND ----------
+
+insert = sql(f'''INSERT INTO {genie_catalog}.{genie_schema}.fundamentals
+SELECT 
+  ticker,
+  marketCap AS market_capitalization,
+  sharesOutstanding AS outstanding_shares
+FROM 
+  {db_catalog_market}.market_data.company_profile
+WHERE 
+  ticker IS NOT NULL
+  AND ticker != 'NaN'
+  AND companyName IS NOT NULL''')
+
+display(insert)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC An interesting feature to explore is our AI functions (see [doc](https://docs.databricks.com/en/large-language-models/ai-functions.html)). Our portfolio dataset does not contain company description but company name, country and industry. Given the foundational knowledge of modern LLM such as DBRX, we can easily delegate the task of generating a company description to a large language model using `ai_query()` function
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT
+# MAGIC ai_query(
+# MAGIC     'databricks-dbrx-instruct',
+# MAGIC     concat_ws(' ', 'Describe company Apple Inc. in the technology industry')
+# MAGIC   ) AS company_description
 
 # COMMAND ----------
 
@@ -152,19 +194,18 @@ display(insert)
 
 # COMMAND ----------
 
-insert = sql(f'''INSERT INTO {genie_catalog}.{genie_schema}.fundamentals
-SELECT 
-  ticker,
-  marketCap AS market_capitalization,
-  sharesOutstanding AS outstanding_shares
-FROM 
-  {db_catalog_market}.market_data.company_profile
-WHERE 
-  ticker IS NOT NULL
-  AND ticker != 'NaN'
-  AND companyName IS NOT NULL''')
+display(spark.read.table(f'{genie_catalog}.{genie_schema}.portfolio'))
 
-display(insert)
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC In order to ensure relevance of this data for portfolio manager, we simply compute instrument return as a simple window function
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC ```
+# MAGIC return = (close_price / last_close_price) - 1
+# MAGIC ```
 
 # COMMAND ----------
 
@@ -198,7 +239,7 @@ SELECT
   `high`,
   `low`,
   `close`,
-  `adjClose` AS `adjusted_close`, -- the cash value of the last transacted price before the market closes
+  `adjClose` AS `adjusted_close`,
   `vol` AS `volume`,
   `splitFactor` AS `split`
 FROM 
@@ -239,12 +280,97 @@ display(insert)
 
 # MAGIC %md
 # MAGIC ## Data Room
+# MAGIC With only a few steps, our set of tables are ready for genie data room. Head over to genie, and select different tables from your catalog.
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/genie_create.png' width=800/>
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Here are some example questions that could be answered using the provided tables and their data:
+# MAGIC At this point, you can ask genie for specific questions, such as:
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **What are the top 5 companies by market capitalization in our investment portfolio?**
+# MAGIC This query calculates the total market capitalization for each industry represented in the portfolio. It joins the `portfolio` table with the `fundamentals` table on the `ticker` column to get the market capitalization for each company. Then, it groups the results by `industry` and sums up the `market_capitalization` for each industry to get the total market cap per industry. One can easily visualize as a pie chart by asking Genie.
 # MAGIC
-# MAGIC - What are the top 5 companies by market capitalization in our investment portfolio?
-# MAGIC - What is the average sentiment of news articles related to a particular stock (e.g., ticker 'GOOGL')?
-# MAGIC - Can you show me a bar chart of the number of news articles published per day?
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/portfolio_diversification.png' width=800/>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **How has the stock price of Apple changed over time?**
+# MAGIC This query should understand that Apple correspond to ticker `AAPL` and retrieve information from `prices` table. One can notice a major drop in 2014-2015. So why not asking genie if **there was a stock split for AAPL in the 2014 2015 timeframe?**
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/aapl_price.png' width=800/>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC There might be some concepts that a model may not be completely familiar with. Asking a question about market volatility may yield incorrect results. Luckily, one can create additional set of instructions that can guide our model towards the right answer. In this case, we explicitly mention volatily to be a measure of standard deviation. These instructions will be borught in as additional context for our LLM
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/genie_instruction.png' width=800/>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Show me the market volatility for Technology companies during the financial crisis by week**
+# MAGIC Modern LLMs should be smart enough to understand the concept of "financial crisis", translating this question as the following query, leveraging our definition of market volality as per our genie instruction
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC
+# MAGIC ```sql
+# MAGIC SELECT
+# MAGIC   date_sub (date, DAYOFWEEK (date) - 1) AS week_start,
+# MAGIC   STDDEV (`return`) AS volatility
+# MAGIC FROM
+# MAGIC   fsgtm.genie_cap_markets.prices p
+# MAGIC   JOIN fsgtm.genie_cap_markets.portfolio po ON p.ticker = po.ticker
+# MAGIC WHERE
+# MAGIC   po.industry = 'Technology'
+# MAGIC   AND date BETWEEN '2007-12-01' AND '2009-06-30'
+# MAGIC GROUP BY
+# MAGIC   week_start
+# MAGIC ORDER BY
+# MAGIC   week_start
+# MAGIC ```
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We report here all questions that makes part of the demo
+# MAGIC
+# MAGIC - *How diversified is my portfolio by market cap?*
+# MAGIC - *Visualize as a pie chart*
+# MAGIC - *What are the top 5 companies by market capitalization in our investment portfolio?*
+# MAGIC - *Visualize*
+# MAGIC - *How has the stock price of Apple changed over time?*
+# MAGIC - *Visualize*
+# MAGIC - *Was there a stock split for AAPL in the 2014 2015 timeframe?*
+# MAGIC - *Show me the market volatility for Technology companies during the financial crisis by week*
+# MAGIC - *Visualize*
+# MAGIC - *What is the market sentiment for companies in the retail industry?*
+# MAGIC - *Visualize as a bar chart*
+# MAGIC - *What was the top 10 most recent negative event for banking companies in my portfolio*
+# MAGIC - *How has the market sentiment changed by week for my portfolio?*
+# MAGIC - *Visualize*
+# MAGIC - *Tanks Genie, goodbye!*
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC See below an animated gif of the Genie data room we just created through simple clicks.
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/genie_demo.gif'/>
