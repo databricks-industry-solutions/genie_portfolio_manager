@@ -348,8 +348,20 @@ display(insert)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC We report here all questions that makes part of the demo
+# MAGIC **What was the most traded stock during covid?** Same as above, model may be incredibly smart to understand the context of the question. This query calculates the total trading volume for each stock during the COVID-19 period defined as March 1, 2020, to December 31, 2020. It groups the data by the ticker symbol, sums up the trading volume for each group, and then orders the results in descending order based on the total trading volume. The query then limits the results to only the top record, which represents the most traded stock during the specified period.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Example questions
 # MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/genie_demo.gif'/>
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC - *How diversified is my portfolio by market cap?*
 # MAGIC - *Visualize as a pie chart*
 # MAGIC - *What are the top 5 companies by market capitalization in our investment portfolio?*
@@ -369,8 +381,4 @@ display(insert)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC See below an animated gif of the Genie data room we just created through simple clicks.
 # MAGIC
-# MAGIC <br>
-# MAGIC
-# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/genie_demo.gif'/>
