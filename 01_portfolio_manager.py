@@ -1,7 +1,18 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC ## Data access
-# MAGIC For the purpose of that demo, we will be using free sample data from databricks marketplace. 
+# MAGIC
+# MAGIC For the purpose of that demo, we will be using 2 sample datasets from our databricks marketplace, news and daily stopck prices. Although those delta shares might not be publicly available, these can be easily swapped with others. Please check our listings [here](https://marketplace.databricks.com/?searchKey=prices&sortBy=date).
+# MAGIC
+# MAGIC <br>
+# MAGIC
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/market_data.png' width=500>
+# MAGIC <img src='https://raw.githubusercontent.com/databricks-industry-solutions/genie_portfolio_manager/main/images/market_news.png' width=500>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Available as delta sharing, tables can be shared to a dedicated catalog (respectively `fsgtm_market_news` and `fsgtm_market_data` here). 
 
 # COMMAND ----------
 
@@ -9,19 +20,43 @@
 db_catalog_news = 'fsgtm_market_news'
 db_catalog_market = 'fsgtm_market_data'
 
+# COMMAND ----------
+
+display(sql(f'SHOW DATABASES IN {db_catalog_news}'))
+
+# COMMAND ----------
+
+display(sql(f'SHOW TABLES IN {db_catalog_news}.market_data'))
+
+# COMMAND ----------
+
+display(sql(f'DESCRIBE TABLE {db_catalog_news}.market_data.news'))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Unfortunately, these tables are poorly described, making text-to-sql capability more complex. In the next section, we will materialize those tables with properly defined metadata and column descriptions.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create data model
+# MAGIC Data shared by provider might not contain description and metadata that can be further leveraged by Databricks AI capabilities. In this section, we will enforce schema and metadata by physically materializing those delta shares into tables, all governed on unity catalog (`fsgtm`). Please change catalog name as your convenience.
+
+# COMMAND ----------
+
 # Writing to a dedicated catalog
 genie_catalog = 'fsgtm'
 genie_schema = 'genie_cap_markets'
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Create data model
+_ = sql(f'CREATE CATALOG IF NOT EXISTS {genie_catalog}')
+_ = sql(f'CREATE DATABASE IF NOT EXISTS {genie_catalog}.{genie_schema}')
 
 # COMMAND ----------
 
-_ = sql(f'CREATE CATALOG IF NOT EXISTS {genie_catalog}')
-_ = sql(f'CREATE DATABASE IF NOT EXISTS {genie_catalog}.{genie_schema}')
+
 
 # COMMAND ----------
 
